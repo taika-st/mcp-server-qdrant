@@ -11,16 +11,10 @@ This repository is an example of how to create a MCP server for [Qdrant](https:/
 
 ## Overview
 
-An official Model Context Protocol server for keeping and retrieving memories in the Qdrant vector search engine.
-It acts as a semantic memory layer on top of the Qdrant database.
+A Model Context Protocol server for advanced GitHub codebase search using Qdrant vector search engine.
+It provides semantic code search capabilities across vectorized GitHub repositories.
 
-### Operating Modes
-
-**Personal Memory Mode (Default)**: Traditional semantic memory for personal knowledge management with `qdrant-find` and `qdrant-store` tools.
-
-**Enterprise GitHub Search Mode**: Advanced code search capabilities for vectorized GitHub repositories with repository-scoped semantic search, code pattern analysis, and implementation discovery tools.
-
-#### Enterprise Mode Features
+### Features
 - **Repository-scoped search**: Always filtered by repository for focused results
 - **Semantic code search**: Find functionality patterns across codebases
 - **Code pattern analysis**: Understand repository structure and common patterns
@@ -28,58 +22,38 @@ It acts as a semantic memory layer on top of the Qdrant database.
 - **Rich metadata filtering**: Filter by programming language, themes, complexity, file types, and more
 - **Hierarchical filtering**: Repository → themes → refinement filters for optimal search experience
 
-Enable enterprise mode with: `ENTERPRISE_MODE=true`
+
 
 ## Components
 
 ### Tools
 
-1. `qdrant-store`
-   - Store some information in the Qdrant database
-   - Input:
-     - `information` (string): Information to store
-     - `metadata` (JSON): Optional metadata to store
-     - `collection_name` (string): Name of the collection to store the information in. This field is required if there are no default collection name.
-                                   If there is a default collection name, this field is not enabled.
-   - Returns: Confirmation message
-2. `qdrant-find`
-   - Retrieve relevant information from the Qdrant database
-   - Input:
-     - `query` (string): Query to use for searching
-     - `collection_name` (string): Name of the collection to store the information in. This field is required if there are no default collection name.
-                                   If there is a default collection name, this field is not enabled.
-   - Returns: Information stored in the Qdrant database as separate messages
-
-### Enterprise Tools (Available when ENTERPRISE_MODE=true)
-
-When enterprise mode is enabled, additional tools become available for GitHub codebase search:
-
-3. `qdrant-search-repository`
+1. `search-repository`
    - Search for code patterns and implementations within a specific GitHub repository
    - Input:
      - `repository_id` (string, required): Repository identifier in format 'owner/repo' (e.g., 'taika-st/dtna-chat')
      - `query` (string): Semantic search query for finding code patterns, functionality, or implementations
-     - `themes` (array, optional): Code themes/patterns to match (e.g., ['authentication', 'database'])
+     - `themes` (string, optional): JSON array of code themes/patterns to match (e.g., '["authentication", "database"]')
      - `programming_language` (string, optional): Filter by programming language
      - `complexity_score` (integer, optional): Minimum complexity score
      - Additional filterable fields: file_type, directory, has_code_patterns, etc.
    - Returns: Formatted code snippets with rich metadata
 
-4. `qdrant-analyze-patterns`
+2. `analyze-repository-patterns`
    - Analyze code patterns, themes, and architecture within a repository
    - Input:
      - `repository_id` (string, required): Repository identifier
-     - `themes` (array, optional): Specific themes to analyze
+     - `themes` (string, optional): JSON array of specific themes to analyze
      - `programming_language` (string, optional): Focus on specific language
      - `directory` (string, optional): Analyze specific directory
    - Returns: Repository analysis with statistics and insights
 
-5. `qdrant-find-implementations`
-   - Find all implementations of a specific pattern or functionality within a repository
+3. `find-repository-implementations`
+   - Find implementations of specific patterns or functionality within a repository
    - Input:
      - `repository_id` (string, required): Repository identifier
      - `pattern_query` (string): Description of pattern to find (e.g., 'user authentication', 'database connection')
-     - `themes` (array, optional): Expected themes for filtering
+     - `themes` (string, optional): JSON array of expected themes for filtering
      - `programming_language` (string, optional): Expected programming language
      - `min_complexity` (integer, optional): Minimum complexity threshold
    - Returns: Implementations ranked by semantic similarity
@@ -88,28 +62,29 @@ When enterprise mode is enabled, additional tools become available for GitHub co
 
 The configuration of the server is done using environment variables:
 
-| Name                     | Description                                                         | Default Value                                                     |
-|--------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------|
-| `QDRANT_URL`             | URL of the Qdrant server                                            | None                                                              |
-| `QDRANT_API_KEY`         | API key for the Qdrant server                                       | None                                                              |
-| `COLLECTION_NAME`        | Name of the default collection to use.                              | None                                                              |
-| `QDRANT_LOCAL_PATH`      | Path to the local Qdrant database (alternative to `QDRANT_URL`)     | None                                                              |
-| `EMBEDDING_PROVIDER`     | Embedding provider to use (currently only "fastembed" is supported) | `fastembed`                                                       |
-| `EMBEDDING_MODEL`        | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2`                          |
-| `TOOL_STORE_DESCRIPTION` | Custom description for the store tool                               | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
-| `TOOL_FIND_DESCRIPTION`  | Custom description for the find tool                                | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
-| `ENTERPRISE_MODE`        | Enable enterprise GitHub codebase search mode                       | `false`                                                            |
+| Name                                        | Description                                                         | Default Value                                                     |
+|---------------------------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------|
+| `QDRANT_URL`                                | URL of the Qdrant server                                            | None                                                              |
+| `QDRANT_API_KEY`                            | API key for the Qdrant server                                       | None                                                              |
+| `COLLECTION_NAME`                           | Name of the collection containing vectorized GitHub repositories    | None                                                              |
+| `QDRANT_LOCAL_PATH`                         | Path to the local Qdrant database (alternative to `QDRANT_URL`)     | None                                                              |
+| `QDRANT_SEARCH_LIMIT`                       | Maximum results per search operation                                 | `10`                                                              |
+| `QDRANT_ALLOW_ARBITRARY_FILTER`             | Allow arbitrary filter conditions in queries                        | `false`                                                           |
+| `EMBEDDING_PROVIDER`                        | Embedding provider to use (currently only "fastembed" is supported) | `fastembed`                                                       |
+| `EMBEDDING_MODEL`                           | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2`                          |
+| `TOOL_SEARCH_REPOSITORY_DESCRIPTION`        | Custom description for the search-repository tool                   | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
+| `TOOL_ANALYZE_PATTERNS_DESCRIPTION`         | Custom description for the analyze-repository-patterns tool         | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
+| `TOOL_FIND_IMPLEMENTATIONS_DESCRIPTION`     | Custom description for the find-repository-implementations tool     | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
 
-### Enterprise Mode Environment Variables
+### GitHub Codebase Search Configuration
 
-When `ENTERPRISE_MODE=true`, the server enables additional enterprise features for GitHub codebase search:
+The server is designed for searching vectorized GitHub repositories. Recommended configuration:
 
-| Name                     | Description                                                         | Example Value                             |
+| Setting                  | Recommended Value                                                   | Purpose                                   |
 |--------------------------|---------------------------------------------------------------------|-------------------------------------------|
-| `ENTERPRISE_MODE`        | Enable enterprise tools for GitHub codebase search                 | `true`                                    |
-| `COLLECTION_NAME`        | Collection containing vectorized GitHub repositories                | `github-codebases`                        |
-| `QDRANT_SEARCH_LIMIT`    | Maximum results per search operation                                | `10`                                      |
-| `QDRANT_READ_ONLY`       | Disable store operations (recommended for code search)             | `true`                                    |
+| `COLLECTION_NAME`        | `github-codebases` or similar descriptive name                     | Collection with vectorized repositories   |
+| `QDRANT_SEARCH_LIMIT`    | `10-50` depending on use case                                       | Balance between relevance and performance |
+| `QDRANT_ALLOW_ARBITRARY_FILTER` | `false` (recommended for security)                             | Restrict to predefined filter fields     |
 
 Note: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.
 

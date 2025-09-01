@@ -1,8 +1,6 @@
 import pytest
-import os
-from typing import Dict, Any
 
-from mcp_server_qdrant.settings import QdrantSettings, ToolSettings, FilterableField
+from mcp_server_qdrant.settings import QdrantSettings
 from mcp_server_qdrant.enterprise_config import (
     ENTERPRISE_FILTERABLE_FIELDS,
     get_enterprise_filterable_fields_dict,
@@ -85,42 +83,18 @@ class TestEnterpriseConfig:
                 assert field_name not in fields_with_conditions, f"Field {field_name} should not be exposed"
 
     def test_qdrant_settings_enterprise_mode(self, monkeypatch):
-        """Test QdrantSettings with enterprise mode enabled."""
+        """Test QdrantSettings with enterprise mode."""
         # Test enterprise mode disabled (default)
         settings = QdrantSettings()
-        assert settings.enterprise_mode is False
 
         # Should return empty dict for filterable fields when no custom fields are set
         fields_dict = settings.filterable_fields_dict()
         assert isinstance(fields_dict, dict)
 
-        # Test enterprise mode enabled via environment variable
-        monkeypatch.setenv("ENTERPRISE_MODE", "true")
-        enterprise_settings = QdrantSettings()
-        assert enterprise_settings.enterprise_mode is True
-
         # Should return enterprise filterable fields
-        enterprise_fields = enterprise_settings.filterable_fields_dict()
-        assert len(enterprise_fields) > 0
-        assert "repository_id" in enterprise_fields
-        assert "themes" in enterprise_fields
-
-    def test_tool_settings_enterprise_mode(self, monkeypatch):
-        """Test ToolSettings with enterprise mode and effective descriptions."""
-        # Test default mode
-        default_settings = ToolSettings()
-        assert default_settings.enterprise_mode is False
-        default_description = default_settings.get_effective_find_description()
-        assert "memories" in default_description.lower(), "Should contain personal memory language"
-
-        # Test enterprise mode via environment variable
-        monkeypatch.setenv("ENTERPRISE_MODE", "true")
-        enterprise_settings = ToolSettings()
-        assert enterprise_settings.enterprise_mode is True
-        enterprise_description = enterprise_settings.get_effective_find_description()
-        assert "repository" in enterprise_description.lower(), "Should contain repository language"
-        assert "github" in enterprise_description.lower(), "Should mention GitHub"
-        assert "repository_id" in enterprise_description, "Should mention repository_id parameter"
+        assert len(fields_dict) > 0
+        assert "repository_id" in fields_dict
+        assert "themes" in fields_dict
 
     def test_enterprise_field_types_and_conditions_compatibility(self):
         """Test that field types and conditions are compatible with Qdrant filtering."""

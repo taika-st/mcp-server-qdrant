@@ -5,26 +5,28 @@ from pydantic_settings import BaseSettings
 
 from mcp_server_qdrant.embeddings.types import EmbeddingProviderType
 
-DEFAULT_TOOL_STORE_DESCRIPTION = (
-    "Keep the memory for later use, when you are asked to remember something."
-)
-DEFAULT_TOOL_FIND_DESCRIPTION = (
-    "Look up memories in Qdrant. Use this tool when you need to: \n"
-    " - Find memories by their content \n"
-    " - Access memories for further analysis \n"
-    " - Get some personal information about the user"
-)
-
 # Enterprise tool descriptions for GitHub codebase search
-ENTERPRISE_TOOL_SEARCH_DESCRIPTION = (
-    "Search for code patterns and implementations across GitHub repositories. "
+SEARCH_REPOSITORY_DESCRIPTION = (
+    "Search for code patterns and implementations within a specific GitHub repository. "
     "Use this tool to find specific functionality, patterns, or implementations within a codebase. "
     "Always specify repository_id to scope your search to a specific repository. "
     "Use themes to find semantic patterns (e.g., 'authentication', 'database', 'api'). "
     "Examples:\n"
-    "- Find authentication patterns: repository_id='owner/repo', themes=['authentication']\n"
-    "- Find TypeScript database code: repository_id='owner/repo', themes=['database'], programming_language='typescript'\n"
-    "- Find complex frontend components: repository_id='owner/repo', themes=['frontend'], complexity_score=5"
+    "- Find authentication patterns: repository_id='owner/repo', themes='[\"authentication\"]'\n"
+    "- Find TypeScript database code: repository_id='owner/repo', themes='[\"database\"]', programming_language='typescript'\n"
+    "- Find complex frontend components: repository_id='owner/repo', themes='[\"frontend\"]', complexity_score=5"
+)
+
+ANALYZE_PATTERNS_DESCRIPTION = (
+    "Analyze code patterns, themes, and architecture within a repository. "
+    "Provides insights into codebase structure, common patterns, and technology usage. "
+    "Useful for understanding unfamiliar codebases or documenting existing ones."
+)
+
+FIND_IMPLEMENTATIONS_DESCRIPTION = (
+    "Find all implementations of a specific pattern or functionality within a repository. "
+    "Useful for discovering how features are implemented, comparing approaches, "
+    "or finding examples of specific patterns. Returns implementations ranked by similarity."
 )
 
 METADATA_PATH = "metadata"
@@ -32,29 +34,21 @@ METADATA_PATH = "metadata"
 
 class ToolSettings(BaseSettings):
     """
-    Configuration for all the tools.
+    Configuration for enterprise GitHub codebase search tools.
     """
 
-    tool_store_description: str = Field(
-        default=DEFAULT_TOOL_STORE_DESCRIPTION,
-        validation_alias="TOOL_STORE_DESCRIPTION",
+    search_repository_description: str = Field(
+        default=SEARCH_REPOSITORY_DESCRIPTION,
+        validation_alias="TOOL_SEARCH_REPOSITORY_DESCRIPTION",
     )
-    tool_find_description: str = Field(
-        default=DEFAULT_TOOL_FIND_DESCRIPTION,
-        validation_alias="TOOL_FIND_DESCRIPTION",
+    analyze_patterns_description: str = Field(
+        default=ANALYZE_PATTERNS_DESCRIPTION,
+        validation_alias="TOOL_ANALYZE_PATTERNS_DESCRIPTION",
     )
-    enterprise_mode: bool = Field(
-        default=False,
-        validation_alias="ENTERPRISE_MODE",
-        description="Enable enterprise GitHub codebase search mode"
+    find_implementations_description: str = Field(
+        default=FIND_IMPLEMENTATIONS_DESCRIPTION,
+        validation_alias="TOOL_FIND_IMPLEMENTATIONS_DESCRIPTION",
     )
-
-    def get_effective_find_description(self) -> str:
-        """Get the appropriate find tool description based on enterprise mode."""
-        if self.enterprise_mode:
-            return ENTERPRISE_TOOL_SEARCH_DESCRIPTION
-        return self.tool_find_description
-
 
 class EmbeddingProviderSettings(BaseSettings):
     """
@@ -106,36 +100,20 @@ class QdrantSettings(BaseSettings):
     )
     local_path: str | None = Field(default=None, validation_alias="QDRANT_LOCAL_PATH")
     search_limit: int = Field(default=10, validation_alias="QDRANT_SEARCH_LIMIT")
-    read_only: bool = Field(default=False, validation_alias="QDRANT_READ_ONLY")
 
     filterable_fields: list[FilterableField] | None = Field(default=None)
 
     allow_arbitrary_filter: bool = Field(
         default=False, validation_alias="QDRANT_ALLOW_ARBITRARY_FILTER"
     )
-    enterprise_mode: bool = Field(
-        default=False,
-        validation_alias="ENTERPRISE_MODE",
-        description="Enable enterprise GitHub codebase search configuration"
-    )
 
     def filterable_fields_dict(self) -> dict[str, FilterableField]:
-        if self.enterprise_mode:
-            return self._get_enterprise_filterable_fields_dict()
-        if self.filterable_fields is None:
-            return {}
-        return {field.name: field for field in self.filterable_fields}
+        return self._get_enterprise_filterable_fields_dict()
+
 
     def filterable_fields_dict_with_conditions(self) -> dict[str, FilterableField]:
-        if self.enterprise_mode:
-            return self._get_enterprise_filterable_fields_with_conditions()
-        if self.filterable_fields is None:
-            return {}
-        return {
-            field.name: field
-            for field in self.filterable_fields
-            if field.condition is not None
-        }
+        return self._get_enterprise_filterable_fields_with_conditions()
+
 
     def _get_enterprise_filterable_fields_dict(self) -> dict[str, FilterableField]:
         """Get enterprise filterable fields configuration."""

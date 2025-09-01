@@ -5,10 +5,9 @@ This module provides MCP tools specifically designed for enterprise code search
 use cases, with repository-scoped semantic search and code pattern analysis.
 """
 
-import json
 import logging
 from typing import Annotated, Any, Dict, List, Optional
-from collections import defaultdict, Counter
+from collections import Counter
 
 from fastmcp import Context
 from pydantic import Field
@@ -17,6 +16,46 @@ from qdrant_client import models
 from mcp_server_qdrant.qdrant import QdrantConnector, Entry, ArbitraryFilter
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_condition_list(condition: models.Condition | List[models.Condition] | None) -> List[models.Condition]:
+    """
+    Convert a condition or list of conditions to a list.
+
+    :param condition: Single condition, list of conditions, or None
+    :return: List of conditions (empty if None)
+    """
+    if condition is None:
+        return []
+    elif isinstance(condition, list):
+        return condition
+    else:
+        return [condition]
+
+
+def _merge_filters(filter1: models.Filter | None, filter2: models.Filter | None) -> models.Filter | None:
+    """
+    Merge two filters, combining their must and must_not conditions.
+
+    :param filter1: First filter (can be None)
+    :param filter2: Second filter (can be None)
+    :return: Merged filter or None if both inputs are None
+    """
+    if filter1 is None and filter2 is None:
+        return None
+    elif filter1 is None:
+        return filter2
+    elif filter2 is None:
+        return filter1
+
+    # Both filters exist, merge them
+    must_conditions = _ensure_condition_list(filter1.must) + _ensure_condition_list(filter2.must)
+    must_not_conditions = _ensure_condition_list(filter1.must_not) + _ensure_condition_list(filter2.must_not)
+
+    return models.Filter(
+        must=must_conditions if must_conditions else None,
+        must_not=must_not_conditions if must_not_conditions else None
+    )
 
 
 def format_code_entry(entry: Entry, repository_id: str) -> str:
@@ -92,7 +131,7 @@ async def search_repository(
     await ctx.debug(f"Searching repository {repository_id} for query: {query}")
 
     # Build filter ensuring repository_id is always included
-    filter_conditions = {"repository_id": repository_id}
+    filter_conditions: Dict[str, Any] = {"repository_id": repository_id}
 
     await ctx.debug(f"Applied filters: {filter_conditions}")
 
@@ -104,14 +143,7 @@ async def search_repository(
     # Combine with any additional query filter
     if query_filter:
         additional_filter = models.Filter(**query_filter)
-        if combined_filter:
-            # Merge filters (both must be satisfied)
-            combined_filter = models.Filter(
-                must=(combined_filter.must or []) + (additional_filter.must or []),
-                must_not=(combined_filter.must_not or []) + (additional_filter.must_not or [])
-            )
-        else:
-            combined_filter = additional_filter
+        combined_filter = _merge_filters(combined_filter, additional_filter)
 
     # Execute search
     entries = await qdrant_connector.search(
@@ -168,7 +200,7 @@ async def analyze_repository_patterns(
     await ctx.debug(f"Analyzing patterns in repository {repository_id}")
 
     # Build base filter with repository scope
-    filter_conditions = {"repository_id": repository_id}
+    filter_conditions: Dict[str, Any] = {"repository_id": repository_id}
 
     # Add optional filters
     if themes:
@@ -244,7 +276,7 @@ async def find_implementations(
     await ctx.debug(f"Finding implementations of '{pattern_query}' in repository {repository_id}")
 
     # Build filter
-    filter_conditions = {"repository_id": repository_id}
+    filter_conditions: Dict[str, Any] = {"repository_id": repository_id}
 
     if themes:
         filter_conditions["themes"] = themes

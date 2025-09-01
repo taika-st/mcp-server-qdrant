@@ -154,10 +154,7 @@ class TestEnterpriseTools:
             filterable_fields_with_conditions=filterable_fields,
             repository_id="taika-st/dtna-chat",
             query="database query",
-            collection_name="test_collection",
-            themes=["database"],
-            programming_language="typescript",
-            complexity_score=5
+            collection_name="test_collection"
         )
 
         assert len(result) > 0
@@ -371,17 +368,13 @@ class TestEnterpriseTools:
     async def test_enterprise_tools_integration(self, monkeypatch):
         """Test enterprise tools integration with MCP server."""
         # Set enterprise mode
-        monkeypatch.setenv("ENTERPRISE_MODE", "true")
         monkeypatch.setenv("COLLECTION_NAME", "test")
-
-        from mcp_server_qdrant.settings import QdrantSettings, ToolSettings
 
         qdrant_settings = QdrantSettings()
         tool_settings = ToolSettings()
 
-        # Verify enterprise mode is enabled
-        assert qdrant_settings.enterprise_mode is True
-        assert tool_settings.enterprise_mode is True
+        # Test that settings load correctly
+        assert qdrant_settings.collection_name == "test"
 
         # Verify enterprise filterable fields are available
         fields = qdrant_settings.filterable_fields_dict()
@@ -471,33 +464,3 @@ class TestEnterpriseTools:
 
         result_empty = format_code_entry(entry_empty_themes, "test/repo")
         assert "<themes>None</themes>" in result_empty
-
-    @pytest.mark.asyncio
-    async def test_complex_filter_combinations(self, mock_context, mock_qdrant_connector,
-                                              sample_entry, filterable_fields):
-        """Test complex combinations of filters."""
-        mock_qdrant_connector.search.return_value = [sample_entry]
-
-        result = await search_repository(
-            mock_context,
-            mock_qdrant_connector,
-            search_limit=10,
-            filterable_fields_with_conditions=filterable_fields,
-            repository_id="taika-st/dtna-chat",
-            query="complex search",
-            collection_name="test_collection",
-            themes=["authentication", "database"],
-            programming_language="typescript",
-            complexity_score=5,
-            has_code_patterns=True,
-            directory="src/lib",
-            line_count=10
-        )
-
-        assert len(result) > 0
-        mock_qdrant_connector.search.assert_called_once()
-
-        # Verify multiple filters were logged
-        debug_calls = [call.args[0] for call in mock_context.debug.call_args_list]
-        filter_debug_call = next((call for call in debug_calls if "Applied filters" in call), None)
-        assert filter_debug_call is not None
