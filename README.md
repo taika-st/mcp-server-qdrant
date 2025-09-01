@@ -14,6 +14,22 @@ This repository is an example of how to create a MCP server for [Qdrant](https:/
 An official Model Context Protocol server for keeping and retrieving memories in the Qdrant vector search engine.
 It acts as a semantic memory layer on top of the Qdrant database.
 
+### Operating Modes
+
+**Personal Memory Mode (Default)**: Traditional semantic memory for personal knowledge management with `qdrant-find` and `qdrant-store` tools.
+
+**Enterprise GitHub Search Mode**: Advanced code search capabilities for vectorized GitHub repositories with repository-scoped semantic search, code pattern analysis, and implementation discovery tools.
+
+#### Enterprise Mode Features
+- **Repository-scoped search**: Always filtered by repository for focused results
+- **Semantic code search**: Find functionality patterns across codebases
+- **Code pattern analysis**: Understand repository structure and common patterns
+- **Implementation discovery**: Find examples of specific functionality
+- **Rich metadata filtering**: Filter by programming language, themes, complexity, file types, and more
+- **Hierarchical filtering**: Repository → themes → refinement filters for optimal search experience
+
+Enable enterprise mode with: `ENTERPRISE_MODE=true`
+
 ## Components
 
 ### Tools
@@ -34,6 +50,40 @@ It acts as a semantic memory layer on top of the Qdrant database.
                                    If there is a default collection name, this field is not enabled.
    - Returns: Information stored in the Qdrant database as separate messages
 
+### Enterprise Tools (Available when ENTERPRISE_MODE=true)
+
+When enterprise mode is enabled, additional tools become available for GitHub codebase search:
+
+3. `qdrant-search-repository`
+   - Search for code patterns and implementations within a specific GitHub repository
+   - Input:
+     - `repository_id` (string, required): Repository identifier in format 'owner/repo' (e.g., 'taika-st/dtna-chat')
+     - `query` (string): Semantic search query for finding code patterns, functionality, or implementations
+     - `themes` (array, optional): Code themes/patterns to match (e.g., ['authentication', 'database'])
+     - `programming_language` (string, optional): Filter by programming language
+     - `complexity_score` (integer, optional): Minimum complexity score
+     - Additional filterable fields: file_type, directory, has_code_patterns, etc.
+   - Returns: Formatted code snippets with rich metadata
+
+4. `qdrant-analyze-patterns`
+   - Analyze code patterns, themes, and architecture within a repository
+   - Input:
+     - `repository_id` (string, required): Repository identifier
+     - `themes` (array, optional): Specific themes to analyze
+     - `programming_language` (string, optional): Focus on specific language
+     - `directory` (string, optional): Analyze specific directory
+   - Returns: Repository analysis with statistics and insights
+
+5. `qdrant-find-implementations`
+   - Find all implementations of a specific pattern or functionality within a repository
+   - Input:
+     - `repository_id` (string, required): Repository identifier
+     - `pattern_query` (string): Description of pattern to find (e.g., 'user authentication', 'database connection')
+     - `themes` (array, optional): Expected themes for filtering
+     - `programming_language` (string, optional): Expected programming language
+     - `min_complexity` (integer, optional): Minimum complexity threshold
+   - Returns: Implementations ranked by semantic similarity
+
 ## Environment Variables
 
 The configuration of the server is done using environment variables:
@@ -48,6 +98,18 @@ The configuration of the server is done using environment variables:
 | `EMBEDDING_MODEL`        | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2`                          |
 | `TOOL_STORE_DESCRIPTION` | Custom description for the store tool                               | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
 | `TOOL_FIND_DESCRIPTION`  | Custom description for the find tool                                | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
+| `ENTERPRISE_MODE`        | Enable enterprise GitHub codebase search mode                       | `false`                                                            |
+
+### Enterprise Mode Environment Variables
+
+When `ENTERPRISE_MODE=true`, the server enables additional enterprise features for GitHub codebase search:
+
+| Name                     | Description                                                         | Example Value                             |
+|--------------------------|---------------------------------------------------------------------|-------------------------------------------|
+| `ENTERPRISE_MODE`        | Enable enterprise tools for GitHub codebase search                 | `true`                                    |
+| `COLLECTION_NAME`        | Collection containing vectorized GitHub repositories                | `github-codebases`                        |
+| `QDRANT_SEARCH_LIMIT`    | Maximum results per search operation                                | `10`                                      |
+| `QDRANT_READ_ONLY`       | Disable store operations (recommended for code search)             | `true`                                    |
 
 Note: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.
 
@@ -186,6 +248,45 @@ For the time being, only [FastEmbed](https://qdrant.github.io/fastembed/) models
 This MCP server can be used with any MCP-compatible client. For example, you can use it with
 [Cursor](https://docs.cursor.com/context/model-context-protocol) and [VS Code](https://code.visualstudio.com/docs), which provide built-in support for the Model Context
 Protocol.
+
+### Enterprise Mode Examples
+
+#### Personal Memory Mode (Default)
+```json
+{
+  "mcpServers": {
+    "qdrant": {
+      "command": "uvx",
+      "args": ["mcp-server-qdrant"],
+      "env": {
+        "QDRANT_URL": "https://your-qdrant-cluster.com",
+        "QDRANT_API_KEY": "your-api-key",
+        "COLLECTION_NAME": "personal-memories"
+      }
+    }
+  }
+}
+```
+
+#### Enterprise GitHub Codebase Search Mode
+```json
+{
+  "mcpServers": {
+    "qdrant-enterprise": {
+      "command": "uvx",
+      "args": ["mcp-server-qdrant"],
+      "env": {
+        "ENTERPRISE_MODE": "true",
+        "QDRANT_URL": "https://your-qdrant-cluster.com",
+        "QDRANT_API_KEY": "your-api-key",
+        "COLLECTION_NAME": "github-codebases",
+        "QDRANT_READ_ONLY": "true",
+        "QDRANT_SEARCH_LIMIT": "10"
+      }
+    }
+  }
+}
+```
 
 ### Using with Cursor/Windsurf
 
@@ -465,18 +566,58 @@ For workspace configuration with Docker, use this in `.vscode/mcp.json`:
 If you have suggestions for how mcp-server-qdrant could be improved, or want to report a bug, open an issue!
 We'd love all and any contributions.
 
-### Testing `mcp-server-qdrant` locally
+### Development Setup
 
-The [MCP inspector](https://github.com/modelcontextprotocol/inspector) is a developer tool for testing and debugging MCP
-servers. It runs both a client UI (default port 5173) and an MCP proxy server (default port 3000). Open the client UI in
-your browser to use the inspector.
+For rapid iteration during development:
 
-```shell
-QDRANT_URL=":memory:" COLLECTION_NAME="test" \
-fastmcp dev src/mcp_server_qdrant/server.py
+```bash
+# Install the project in editable mode
+uv pip install -e .
+
+# Test with MCP Inspector
+npx @modelcontextprotocol/inspector uv run mcp-server-qdrant
 ```
 
-Once started, open your browser to http://localhost:5173 to access the inspector interface.
+### Publishing to PyPI
+
+When extending or forking this project, ensure you have a unique package name:
+
+1. **Update `pyproject.toml`** with a unique name (e.g., `mcp-server-qdrant-pro`):
+   ```toml
+   [project]
+   name = "mcp-server-qdrant-pro"
+
+   [project.scripts]
+   mcp-server-qdrant-pro = "mcp_server_qdrant.main:main"
+
+   [tool.hatch.build.targets.wheel]
+   packages = ["src/mcp_server_qdrant"]
+   ```
+
+2. **Build the package** (requires PyPI account and API token):
+   ```bash
+   # Build without including source files
+   uv build --no-sources
+   ```
+
+3. **Publish to PyPI**:
+   ```bash
+   # Note: API token must be scoped to "all projects" for first-time publishers
+   uv publish --token pypi-yourtoken
+   ```
+
+### Testing `mcp-server-qdrant-pro` locally
+
+The [MCP inspector](https://github.com/modelcontextprotocol/inspector) is the recommended tool for testing:
+
+```bash
+# Using development mode
+npx @modelcontextprotocol/inspector uv run mcp-server-qdrant-pro
+
+# For enterprise mode testing
+ENTERPRISE_MODE=true COLLECTION_NAME="test" QDRANT_LOCAL_PATH="/tmp/test-storage" \
+npx @modelcontextprotocol/inspector uv run mcp-server-qdrant-pro
+```
 
 ## License
 

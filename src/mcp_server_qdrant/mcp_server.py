@@ -17,6 +17,11 @@ from mcp_server_qdrant.settings import (
     QdrantSettings,
     ToolSettings,
 )
+from mcp_server_qdrant.enterprise_tools import (
+    search_repository,
+    analyze_repository_patterns,
+    find_implementations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +192,7 @@ class QdrantMCPServer(FastMCP):
         self.tool(
             find_foo,
             name="qdrant-find",
-            description=self.tool_settings.tool_find_description,
+            description=self.tool_settings.get_effective_find_description(),
         )
 
         if not self.qdrant_settings.read_only:
@@ -197,3 +202,103 @@ class QdrantMCPServer(FastMCP):
                 name="qdrant-store",
                 description=self.tool_settings.tool_store_description,
             )
+
+        # Register enterprise tools if enterprise mode is enabled
+        if self.qdrant_settings.enterprise_mode:
+            self.setup_enterprise_tools()
+
+    def setup_enterprise_tools(self):
+        """
+        Register enterprise-specific tools for GitHub codebase search.
+        """
+        filterable_conditions = self.qdrant_settings.filterable_fields_dict_with_conditions()
+
+        # Create enterprise tool functions with proper context
+        async def enterprise_search_repository(
+            ctx: Context,
+            repository_id: str,
+            query: str,
+            query_filter: ArbitraryFilter | None = None,
+        ):
+            return await search_repository(
+                ctx,
+                self.qdrant_connector,
+                self.qdrant_settings.search_limit,
+                filterable_conditions,
+                repository_id,
+                query,
+                self.qdrant_settings.collection_name,
+                query_filter,
+            )
+
+        async def enterprise_analyze_patterns(
+            ctx: Context,
+            repository_id: str,
+            themes: list[str] | None = None,
+            programming_language: str | None = None,
+            directory: str | None = None,
+        ):
+            return await analyze_repository_patterns(
+                ctx,
+                self.qdrant_connector,
+                self.qdrant_settings.search_limit,
+                filterable_conditions,
+                repository_id,
+                self.qdrant_settings.collection_name,
+                themes,
+                programming_language,
+                directory,
+            )
+
+        async def enterprise_find_implementations(
+            ctx: Context,
+            repository_id: str,
+            pattern_query: str,
+            themes: list[str] | None = None,
+            programming_language: str | None = None,
+            min_complexity: int | None = None,
+        ):
+            return await find_implementations(
+                ctx,
+                self.qdrant_connector,
+                self.qdrant_settings.search_limit,
+                filterable_conditions,
+                repository_id,
+                pattern_query,
+                self.qdrant_settings.collection_name,
+                themes,
+                programming_language,
+                min_complexity,
+            )
+
+        # Register enterprise tools directly (filter wrapping disabled for now)
+        # Note: Individual parameters will be exposed based on function signatures
+
+        # Apply query_filter removal if arbitrary filters not allowed
+        if not self.qdrant_settings.allow_arbitrary_filter:
+            enterprise_search_repository = make_partial_function(enterprise_search_repository, {"query_filter": None})
+
+        # Register enterprise tools
+        self.tool(
+            enterprise_search_repository,
+            name="qdrant-search-repository",
+            description="Search for code patterns and implementations within a specific GitHub repository. "
+                        "Always specify repository_id to scope your search. Use themes to find semantic patterns. "
+                        "Examples: Find authentication code, database implementations, API endpoints."
+        )
+
+        self.tool(
+            enterprise_analyze_patterns,
+            name="qdrant-analyze-patterns",
+            description="Analyze code patterns, themes, and architecture within a repository. "
+                        "Provides insights into codebase structure, common patterns, and technology usage. "
+                        "Useful for understanding unfamiliar codebases or documenting existing ones."
+        )
+
+        self.tool(
+            enterprise_find_implementations,
+            name="qdrant-find-implementations",
+            description="Find all implementations of a specific pattern or functionality within a repository. "
+                        "Useful for discovering how features are implemented, comparing approaches, "
+                        "or finding examples of specific patterns. Returns implementations ranked by similarity."
+        )
