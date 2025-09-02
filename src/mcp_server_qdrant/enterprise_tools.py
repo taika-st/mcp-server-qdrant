@@ -51,9 +51,11 @@ def _merge_filters(filter1: models.Filter | None, filter2: models.Filter | None)
     # Both filters exist, merge them
     must_conditions = _ensure_condition_list(filter1.must) + _ensure_condition_list(filter2.must)
     must_not_conditions = _ensure_condition_list(filter1.must_not) + _ensure_condition_list(filter2.must_not)
+    should_conditions = _ensure_condition_list(getattr(filter1, "should", None)) + _ensure_condition_list(getattr(filter2, "should", None))
 
     return models.Filter(
         must=must_conditions if must_conditions else None,
+        should=should_conditions if should_conditions else None,
         must_not=must_not_conditions if must_not_conditions else None
     )
 
@@ -152,6 +154,30 @@ async def search_repository(
         limit=search_limit,
         query_filter=combined_filter,
     )
+
+    # Fallback: if no results and themes were expressed via should conditions,
+    # retry without theme-related should clauses to avoid over-filtering.
+    if not entries and combined_filter and getattr(combined_filter, "should", None):
+        # Remove should conditions targeting metadata.themes
+        filtered_should = []
+        for cond in _ensure_condition_list(combined_filter.should):
+            # Only retain non-themes conditions
+            if isinstance(cond, models.FieldCondition) and cond.key == "metadata.themes":
+                continue
+            filtered_should.append(cond)
+
+        fallback_filter = models.Filter(
+            must=_ensure_condition_list(combined_filter.must) or None,
+            must_not=_ensure_condition_list(combined_filter.must_not) or None,
+            should=filtered_should or None,
+        )
+
+        entries = await qdrant_connector.search(
+            query,
+            collection_name=collection_name,
+            limit=search_limit,
+            query_filter=fallback_filter,
+        )
 
     if not entries:
         return [f"No results found in repository '{repository_id}' for query '{query}'"]

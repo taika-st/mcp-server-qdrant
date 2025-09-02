@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-qdrant-pro"
-version = "0.1.3"
+version = "0.1.4"
 description = "MCP server for Qdrant vector database - supports personal memory management and enterprise GitHub codebase search. Extended from original mcp-server-qdrant package"
 readme = "README.md"
 requires-python = ">=3.10"

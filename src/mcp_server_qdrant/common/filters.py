@@ -11,6 +11,7 @@ def make_filter(
 ) -> ArbitraryFilter:
     must_conditions = []
     must_not_conditions = []
+    should_conditions = []
 
     for raw_field_name, field_value in values.items():
         if raw_field_name not in filterable_fields:
@@ -162,13 +163,42 @@ def make_filter(
                     f"Invalid condition {field.condition} for boolean field {field_name}"
                 )
 
+        elif field.field_type == "text":
+            # Text fields use full-text matching. We implement soft-preference semantics
+            # for lists (OR behavior) by placing conditions into the Filter.should clause.
+            # Single string values are treated the same way to avoid excluding entries
+            # that lack the field (e.g., when metadata.themes is missing).
+            def _to_match_text_conditions(val: Any) -> list[models.FieldCondition]:
+                if isinstance(val, list):
+                    return [
+                        models.FieldCondition(
+                            key=field_name, match=models.MatchText(text=str(v))
+                        )
+                        for v in val
+                    ]
+                else:
+                    return [
+                        models.FieldCondition(
+                            key=field_name, match=models.MatchText(text=str(val))
+                        )
+                    ]
+
+            if field.condition in ("any", "==", None):
+                should_conditions.extend(_to_match_text_conditions(field_value))
+            else:
+                raise ValueError(
+                    f"Invalid condition {field.condition} for text field {field_name}"
+                )
+
         else:
             raise ValueError(
                 f"Unsupported field type {field.field_type} for field {field_name}"
             )
 
     return models.Filter(
-        must=must_conditions, must_not=must_not_conditions
+        must=must_conditions if must_conditions else None,
+        should=should_conditions if should_conditions else None,
+        must_not=must_not_conditions if must_not_conditions else None,
     ).model_dump()
 
 
@@ -186,6 +216,8 @@ def make_indexes(
             indexes[f"{METADATA_PATH}.{field_name}"] = models.PayloadSchemaType.FLOAT
         elif field.field_type == "boolean":
             indexes[f"{METADATA_PATH}.{field_name}"] = models.PayloadSchemaType.BOOL
+        elif field.field_type == "text":
+            indexes[f"{METADATA_PATH}.{field_name}"] = models.PayloadSchemaType.TEXT
         else:
             raise ValueError(
                 f"Unsupported field type {field.field_type} for field {field_name}"

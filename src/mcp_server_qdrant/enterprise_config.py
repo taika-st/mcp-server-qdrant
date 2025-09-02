@@ -23,9 +23,12 @@ ENTERPRISE_FILTERABLE_FIELDS = [
     # SECONDARY FILTER - Semantic Content Classification
     FilterableField(
         name="themes",
-        description="Code themes/patterns array - searches for any matching theme (e.g., 'authentication', 'database', 'frontend', 'api')",
-        field_type="keyword",
-        condition="any",  # Enables array matching with MatchAny
+        description=(
+            "Code themes/patterns text (JSON array) - prefers entries matching any provided term (partial matches allowed, "
+            "e.g., 'auth' will match 'authentication'). If absent in a point, it won't exclude the point."
+        ),
+        field_type="text",
+        condition="any",  # OR semantics across provided terms via full-text MatchText
         required=False
     ),
 

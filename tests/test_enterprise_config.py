@@ -29,12 +29,12 @@ class TestEnterpriseConfig:
         # Check that themes field is present with array matching
         themes_field = next((f for f in fields if f.name == "themes"), None)
         assert themes_field is not None, "themes field must be present"
-        assert themes_field.field_type == "keyword"
+        assert themes_field.field_type == "text"
         assert themes_field.condition == "any", "themes should use 'any' condition for array matching"
         assert themes_field.required is False
 
-        # Check that all fields have valid types
-        valid_types = {"keyword", "integer", "float", "boolean"}
+        # Check that all fields have valid types (including 'text' for full-text themes)
+        valid_types = {"keyword", "integer", "float", "boolean", "text"}
         for field in fields:
             assert field.field_type in valid_types, f"Field {field.name} has invalid type {field.field_type}"
 
@@ -174,14 +174,14 @@ class TestEnterpriseConfig:
 
         # Themes should use 'any' condition for array matching
         assert themes_field.condition == "any", "Themes field should use 'any' condition"
-        assert themes_field.field_type == "keyword", "Themes field should be keyword type"
+        assert themes_field.field_type == "text", "Themes field should be text type for full-text matching"
 
         # Description should indicate it's an array
         assert "array" in themes_field.description.lower(), "Description should mention it's an array"
 
     @pytest.mark.parametrize("field_name,expected_type", [
         ("repository_id", "keyword"),
-        ("themes", "keyword"),
+        ("themes", "text"),
         ("programming_language", "keyword"),
         ("complexity_score", "integer"),
         ("has_code_patterns", "boolean"),
