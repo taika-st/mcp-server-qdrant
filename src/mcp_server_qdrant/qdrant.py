@@ -113,6 +113,9 @@ class QdrantConnector:
         if not collection_exists:
             return []
 
+        # Ensure configured payload indexes exist before querying (idempotent)
+        await self._ensure_collection_exists(collection_name)
+
         # Embed the query
         # ToDo: instead of embedding text explicitly, use `models.Document`,
         # it should unlock usage of server-side inference.
@@ -159,12 +162,23 @@ class QdrantConnector:
                 },
             )
 
-            # Create payload indexes if configured
-
-            if self._field_indexes:
-                for field_name, field_type in self._field_indexes.items():
+        # Ensure payload indexes exist even if the collection was created previously
+        if self._field_indexes:
+            for field_name, field_type in self._field_indexes.items():
+                try:
                     await self._client.create_payload_index(
                         collection_name=collection_name,
                         field_name=field_name,
                         field_schema=field_type,
                     )
+                except Exception as e:  # Qdrant returns error if index already exists
+                    # Be idempotent: ignore errors that indicate the index is already present
+                    msg = str(e).lower()
+                    if "already exists" in msg or "index exists" in msg or "exists" in msg:
+                        logger.debug(
+                            f"Payload index for '{field_name}' already exists in collection '{collection_name}'."
+                        )
+                    else:
+                        logger.warning(
+                            f"Failed to create payload index for '{field_name}' in collection '{collection_name}': {e}"
+                        )
