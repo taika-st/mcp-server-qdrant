@@ -28,35 +28,45 @@ It provides semantic code search capabilities across vectorized GitHub repositor
 
 ### Tools
 
-1. `search-repository`
-   - Search for code patterns and implementations within a specific GitHub repository
+1. `qdrant-search-repository`
+   - Search for code patterns and implementations within a specific GitHub repository.
    - Input:
-     - `repository_id` (string, required): Repository identifier in format 'owner/repo' (e.g., 'taika-st/dtna-chat')
-     - `query` (string): Semantic search query for finding code patterns, functionality, or implementations
-     - `themes` (string, optional): JSON array of code themes/patterns to match (e.g., '["authentication", "database"]')
-     - `programming_language` (string, optional): Filter by programming language
-     - `complexity_score` (integer, optional): Minimum complexity score
-     - Additional filterable fields: file_type, directory, has_code_patterns, etc.
-   - Returns: Formatted code snippets with rich metadata
+     - `repository_id` (string, required): Repository identifier in format 'owner/repo' (e.g., 'taika-st/dtna-chat').
+     - `query` (string): Semantic search query for finding code patterns, functionality, or implementations.
+     - `themes` (string, optional): JSON array string of code themes/patterns (e.g., `'["authentication", "database"]'`). See "Themes full-text search" below for semantics.
+     - `programming_language` (string, optional): Filter by programming language.
+     - `complexity_score` (integer, optional): Minimum complexity score.
+     - Additional filterable fields: `file_type`, `directory`, `has_code_patterns`, etc.
+   - Returns: Formatted code snippets with rich metadata.
 
-2. `analyze-repository-patterns`
-   - Analyze code patterns, themes, and architecture within a repository
+2. `qdrant-analyze-patterns`
+   - Analyze code patterns, themes, and architecture within a repository.
    - Input:
-     - `repository_id` (string, required): Repository identifier
-     - `themes` (string, optional): JSON array of specific themes to analyze
-     - `programming_language` (string, optional): Focus on specific language
-     - `directory` (string, optional): Analyze specific directory
-   - Returns: Repository analysis with statistics and insights
+     - `repository_id` (string, required): Repository identifier.
+     - `themes` (string, optional): JSON array string of specific themes to analyze.
+     - `programming_language` (string, optional): Focus on specific language.
+     - `directory` (string, optional): Analyze specific directory.
+   - Returns: Repository analysis with statistics and insights.
 
-3. `find-repository-implementations`
-   - Find implementations of specific patterns or functionality within a repository
+3. `qdrant-find-implementations`
+   - Find implementations of specific patterns or functionality within a repository.
    - Input:
-     - `repository_id` (string, required): Repository identifier
-     - `pattern_query` (string): Description of pattern to find (e.g., 'user authentication', 'database connection')
-     - `themes` (string, optional): JSON array of expected themes for filtering
-     - `programming_language` (string, optional): Expected programming language
-     - `min_complexity` (integer, optional): Minimum complexity threshold
-   - Returns: Implementations ranked by semantic similarity
+     - `repository_id` (string, required): Repository identifier.
+     - `pattern_query` (string): Description of pattern to find (e.g., 'user authentication', 'database connection').
+     - `themes` (string, optional): JSON array string of expected themes for filtering.
+     - `programming_language` (string, optional): Expected programming language.
+     - `min_complexity` (integer, optional): Minimum complexity threshold.
+   - Returns: Implementations ranked by semantic similarity.
+
+#### Themes full-text search
+- `themes` is a full-text searchable field. Provided values are matched using OR semantics and support partial matches (e.g., `"auth"` matches `"authentication"`).
+- Entries missing `metadata.themes` are not excluded by a `themes` filter (soft preference via Filter.should).
+- The tools expect `themes` as a JSON array string and parse it internally into a list.
+
+#### Automatic payload index creation
+- The server ensures required payload indexes (including TEXT for `metadata.themes`) exist before querying.
+- Existing collections are upgraded automatically and idempotently on first use.
+- If your Qdrant cluster is configured as read-only, temporarily allow writes to create indexes or pre-create them.
 
 ## Environment Variables
 
@@ -69,6 +79,7 @@ The configuration of the server is done using environment variables:
 | `COLLECTION_NAME`                           | Name of the collection containing vectorized GitHub repositories    | None                                                              |
 | `QDRANT_LOCAL_PATH`                         | Path to the local Qdrant database (alternative to `QDRANT_URL`)     | None                                                              |
 | `QDRANT_SEARCH_LIMIT`                       | Maximum results per search operation                                 | `10`                                                              |
+| `QDRANT_READ_ONLY`                          | If `true`, the server will not attempt to create or modify indexes    | `false`                                                           |
 | `QDRANT_ALLOW_ARBITRARY_FILTER`             | Allow arbitrary filter conditions in queries                        | `false`                                                           |
 | `EMBEDDING_PROVIDER`                        | Embedding provider to use (currently only "fastembed" is supported) | `fastembed`                                                       |
 | `EMBEDDING_MODEL`                           | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2`                          |
@@ -89,7 +100,7 @@ The server is designed for searching vectorized GitHub repositories. Recommended
 Note: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.
 
 > [!IMPORTANT]
-> Command-line arguments are not supported anymore! Please use environment variables for all configuration.
+> All server configuration is provided via environment variables. The only supported command-line argument is `--transport` to select the transport protocol.
 
 ### FastMCP Environment Variables
 
@@ -111,13 +122,13 @@ important ones are listed below:
 
 ### Using uvx
 
-When using [`uvx`](https://docs.astral.sh/uv/guides/tools/#running-tools) no specific installation is needed to directly run *mcp-server-qdrant*.
+When using [`uvx`](https://docs.astral.sh/uv/guides/tools/#running-tools) no specific installation is needed to directly run the server.
 
 ```shell
 QDRANT_URL="http://localhost:6333" \
 COLLECTION_NAME="my-collection" \
 EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2" \
-uvx mcp-server-qdrant
+uvx mcp-server-qdrant-pro
 ```
 
 #### Transport Protocols
@@ -127,7 +138,7 @@ The server supports different transport protocols that can be specified using th
 ```shell
 QDRANT_URL="http://localhost:6333" \
 COLLECTION_NAME="my-collection" \
-uvx mcp-server-qdrant --transport sse
+uvx mcp-server-qdrant-pro --transport sse
 ```
 
 Supported transport protocols:
@@ -186,7 +197,7 @@ To use this server with the Claude Desktop app, add the following configuration 
 {
   "qdrant": {
     "command": "uvx",
-    "args": ["mcp-server-qdrant"],
+    "args": ["mcp-server-qdrant-pro"],
     "env": {
       "QDRANT_URL": "https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
       "QDRANT_API_KEY": "your_api_key",
@@ -203,7 +214,7 @@ For local Qdrant mode:
 {
   "qdrant": {
     "command": "uvx",
-    "args": ["mcp-server-qdrant"],
+    "args": ["mcp-server-qdrant-pro"],
     "env": {
       "QDRANT_LOCAL_PATH": "/path/to/qdrant/database",
       "COLLECTION_NAME": "your-collection-name",
@@ -213,49 +224,30 @@ For local Qdrant mode:
 }
 ```
 
-This MCP server will automatically create a collection with the specified name if it doesn't exist.
+This MCP server will automatically create a collection with the specified name if it doesn't exist, and ensure required payload indexes are present for filters.
 
 By default, the server will use the `sentence-transformers/all-MiniLM-L6-v2` embedding model to encode memories.
 For the time being, only [FastEmbed](https://qdrant.github.io/fastembed/) models are supported.
 
-## Support for other tools
+## Using with MCP-compatible clients
 
-This MCP server can be used with any MCP-compatible client. For example, you can use it with
-[Cursor](https://docs.cursor.com/context/model-context-protocol) and [VS Code](https://code.visualstudio.com/docs), which provide built-in support for the Model Context
-Protocol.
+This MCP server can be used with any MCP-compatible client (Claude Desktop, Cursor/Windsurf, VS Code, etc.). The server exposes the following tools:
 
-### Enterprise Mode Examples
+- `qdrant-search-repository`
+- `qdrant-analyze-patterns`
+- `qdrant-find-implementations`
 
-#### Personal Memory Mode (Default)
-```json
-{
-  "mcpServers": {
-    "qdrant": {
-      "command": "uvx",
-      "args": ["mcp-server-qdrant"],
-      "env": {
-        "QDRANT_URL": "https://your-qdrant-cluster.com",
-        "QDRANT_API_KEY": "your-api-key",
-        "COLLECTION_NAME": "personal-memories"
-      }
-    }
-  }
-}
-```
-
-#### Enterprise GitHub Codebase Search Mode
+### Enterprise GitHub Codebase Search Example
 ```json
 {
   "mcpServers": {
     "qdrant-enterprise": {
       "command": "uvx",
-      "args": ["mcp-server-qdrant"],
+      "args": ["mcp-server-qdrant-pro"],
       "env": {
-        "ENTERPRISE_MODE": "true",
         "QDRANT_URL": "https://your-qdrant-cluster.com",
         "QDRANT_API_KEY": "your-api-key",
         "COLLECTION_NAME": "github-codebases",
-        "QDRANT_READ_ONLY": "true",
         "QDRANT_SEARCH_LIMIT": "10"
       }
     }
@@ -265,51 +257,16 @@ Protocol.
 
 ### Using with Cursor/Windsurf
 
-You can configure this MCP server to work as a code search tool for Cursor or Windsurf by customizing the tool
-descriptions:
-
-```bash
-QDRANT_URL="http://localhost:6333" \
-COLLECTION_NAME="code-snippets" \
-TOOL_STORE_DESCRIPTION="Store reusable code snippets for later retrieval. \
-The 'information' parameter should contain a natural language description of what the code does, \
-while the actual code should be included in the 'metadata' parameter as a 'code' property. \
-The value of 'metadata' is a Python dictionary with strings as keys. \
-Use this whenever you generate some code snippet." \
-TOOL_FIND_DESCRIPTION="Search for relevant code snippets based on natural language descriptions. \
-The 'query' parameter should describe what you're looking for, \
-and the tool will return the most relevant code snippets. \
-Use this when you need to find existing code snippets for reuse or reference." \
-uvx mcp-server-qdrant --transport sse # Enable SSE transport
-```
-
-In Cursor/Windsurf, you can then configure the MCP server in your settings by pointing to this running server using
-SSE transport protocol. The description on how to add an MCP server to Cursor can be found in the [Cursor
-documentation](https://docs.cursor.com/context/model-context-protocol#adding-an-mcp-server-to-cursor). If you are
-running Cursor/Windsurf locally, you can use the following URL:
+Configure the MCP server and point your client to the SSE endpoint (recommended for remote connections). For local runs:
 
 ```
 http://localhost:8000/sse
 ```
 
 > [!TIP]
-> We suggest SSE transport as a preferred way to connect Cursor/Windsurf to the MCP server, as it can support remote
-> connections. That makes it easy to share the server with your team or use it in a cloud environment.
+> We suggest SSE transport to connect Cursor/Windsurf to the MCP server, as it supports remote connections.
 
-This configuration transforms the Qdrant MCP server into a specialized code search tool that can:
-
-1. Store code snippets, documentation, and implementation details
-2. Retrieve relevant code examples based on semantic search
-3. Help developers find specific implementations or usage patterns
-
-You can populate the database by storing natural language descriptions of code snippets (in the `information` parameter)
-along with the actual code (in the `metadata.code` property), and then search for them using natural language queries
-that describe what you're looking for.
-
-> [!NOTE]
-> The tool descriptions provided above are examples and may need to be customized for your specific use case. Consider
-> adjusting the descriptions to better match your team's workflow and the specific types of code snippets you want to
-> store and retrieve.
+This configuration exposes the enterprise code search tools to your client, enabling repository-scoped semantic search, analysis, and implementation discovery.
 
 **If you have successfully installed the `mcp-server-qdrant`, but still can't get it to work with Cursor, please
 consider creating the [Cursor rules](https://docs.cursor.com/context/rules-for-ai) so the MCP tools are always used when
@@ -318,38 +275,14 @@ the MCP server for the documentation or other types of content.
 
 ### Using with Claude Code
 
-You can enhance Claude Code's capabilities by connecting it to this MCP server, enabling semantic search over your
-existing codebase.
+Add the MCP server to Claude Code and connect over SSE. The tools available will be the three enterprise tools described above. You can customize tool descriptions via environment variables:
 
-#### Setting up mcp-server-qdrant
-
-1. Add the MCP server to Claude Code:
-
-    ```shell
-    # Add mcp-server-qdrant configured for code search
-    claude mcp add code-search \
-    -e QDRANT_URL="http://localhost:6333" \
-    -e COLLECTION_NAME="code-repository" \
-    -e EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2" \
-    -e TOOL_STORE_DESCRIPTION="Store code snippets with descriptions. The 'information' parameter should contain a natural language description of what the code does, while the actual code should be included in the 'metadata' parameter as a 'code' property." \
-    -e TOOL_FIND_DESCRIPTION="Search for relevant code snippets using natural language. The 'query' parameter should describe the functionality you're looking for." \
-    -- uvx mcp-server-qdrant
-    ```
-
-2. Verify the server was added:
-
-    ```shell
-    claude mcp list
-    ```
-
-#### Using Semantic Code Search in Claude Code
-
-Tool descriptions, specified in `TOOL_STORE_DESCRIPTION` and `TOOL_FIND_DESCRIPTION`, guide Claude Code on how to use
-the MCP server. The ones provided above are examples and may need to be customized for your specific use case. However,
-Claude Code should be already able to:
-
-1. Use the `qdrant-store` tool to store code snippets with descriptions.
-2. Use the `qdrant-find` tool to search for relevant code snippets using natural language.
+```bash
+export TOOL_SEARCH_REPOSITORY_DESCRIPTION="Custom description for search in your org"
+export TOOL_ANALYZE_PATTERNS_DESCRIPTION="Custom description for analysis"
+export TOOL_FIND_IMPLEMENTATIONS_DESCRIPTION="Custom description for find implementations"
+uvx mcp-server-qdrant-pro --transport sse
+```
 
 ### Run MCP server in Development Mode
 
