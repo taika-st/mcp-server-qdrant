@@ -78,6 +78,64 @@ class TestEmbeddingProviderSettings:
         assert settings.provider_type == EmbeddingProviderType.FASTEMBED
         assert settings.model_name == "custom_model"
 
+    def test_voyageai_provider_string(self):
+        """Test that 'voyageai' string is validated to VOYAGE_AI enum."""
+        settings = EmbeddingProviderSettings(provider='voyageai', model='voyage-3.5')
+        assert settings.provider_type == EmbeddingProviderType.VOYAGE_AI
+        assert settings.model_name == 'voyage-3.5'
+
+    def test_voyageai_provider_enum(self):
+        """Test that VOYAGE_AI enum is accepted directly."""
+        # Note: We can't pass provider_type directly due to field aliases
+        # Use the provider field which gets validated to the enum
+        settings = EmbeddingProviderSettings(
+            provider='voyageai',
+            model='voyage-code-3'
+        )
+        assert settings.provider_type == EmbeddingProviderType.VOYAGE_AI
+        assert settings.model_name == 'voyage-code-3'
+
+    def test_voyageai_environment_variables(self, monkeypatch):
+        """Test VoyageAI configuration via environment variables."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "voyageai")
+        monkeypatch.setenv("EMBEDDING_MODEL", "voyage-law-2")
+
+        settings = EmbeddingProviderSettings()
+        assert settings.provider_type == EmbeddingProviderType.VOYAGE_AI
+        assert settings.model_name == "voyage-law-2"
+
+    def test_invalid_provider_fallback(self):
+        """Test that invalid provider types fall back to FASTEMBED."""
+        settings = EmbeddingProviderSettings(provider='invalid_provider', model='some-model')
+        assert settings.provider_type == EmbeddingProviderType.FASTEMBED
+        # Model should still be preserved
+        assert settings.model_name == 'some-model'
+
+    def test_case_insensitive_provider(self):
+        """Test that provider validation is case insensitive."""
+        settings = EmbeddingProviderSettings(provider='VOYAGEAI', model='voyage-3.5')
+        assert settings.provider_type == EmbeddingProviderType.VOYAGE_AI
+
+    def test_provider_with_whitespace(self):
+        """Test that provider validation handles whitespace."""
+        settings = EmbeddingProviderSettings(provider='  voyageai  ', model='voyage-3.5')
+        assert settings.provider_type == EmbeddingProviderType.VOYAGE_AI
+
+    def test_voyageai_models_variety(self):
+        """Test VoyageAI with different model types."""
+        test_cases = [
+            'voyage-3.5',
+            'voyage-code-3',
+            'voyage-law-2',
+            'voyage-finance-2',
+            'voyage-3.5-lite'
+        ]
+
+        for model in test_cases:
+            settings = EmbeddingProviderSettings(provider='voyageai', model=model)
+            assert settings.provider_type == EmbeddingProviderType.VOYAGE_AI
+            assert settings.model_name == model
+
 
 class TestToolSettings:
     def test_default_values(self):

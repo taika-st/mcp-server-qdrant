@@ -22,44 +22,44 @@ graph TB
     end
 
     subgraph "Settings & Validation Layer"
-        SETTINGS[EmbeddingProviderSettings<br/>🔄 Validates provider string<br/>🔄 Maps to enum values<br/>🔄 Handles backward compatibility]
+        SETTINGS[EmbeddingProviderSettings<br/>Validates provider string<br/>Maps to enum values<br/>Handles backward compatibility]
         QDRANT_SETTINGS[QdrantSettings<br/>Collection, URL, API keys]
         TOOL_SETTINGS[ToolSettings<br/>Tool descriptions]
     end
 
     subgraph "Factory & Provider Selection"
-        FACTORY[create_embedding_provider<br/>🔄 Pattern matching on provider type<br/>🔄 Creates appropriate provider instance]
+        FACTORY[create_embedding_provider<br/>Pattern matching on provider type<br/>Creates appropriate provider instance]
         DECISION{Provider Type?}
     end
 
     subgraph "Embedding Providers"
-        FASTEMBED[FastEmbedProvider<br/>📁 Local models<br/>🔄 Thread pool async<br/>🏷️ Vector: fast-*<br/>📏 Dims: varies by model<br/>💰 No cost<br/>🌐 Offline capable]
+        FASTEMBED[FastEmbedProvider<br/>Local models<br/>Thread pool async<br/>Vector: fast-prefix<br/>Dims: varies by model<br/>No cost<br/>Offline capable]
         
-        VOYAGE[VoyageAIProvider<br/>☁️ Cloud API<br/>⚡ True async<br/>🏷️ Vector: voyage-*<br/>📏 Dims: 1024/512/1536<br/>💳 Usage-based cost<br/>🌐 Internet required]
+        VOYAGE[VoyageAIProvider<br/>Cloud API<br/>True async<br/>Vector: voyage-prefix<br/>Dims: 1024/512/1536<br/>Usage-based cost<br/>Internet required]
         
-        VOYAGE_CLIENT[voyageai.AsyncClient<br/>🔑 API key auth<br/>🔄 Retry logic<br/>⏱️ Timeout handling]
+        VOYAGE_CLIENT[voyageai.AsyncClient<br/>API key auth<br/>Retry logic<br/>Timeout handling]
     end
 
     subgraph "Core Integration Layer"
-        CONNECTOR[QdrantConnector<br/>🔄 Provider-agnostic interface<br/>🔄 Collection management<br/>🔄 Vector operations<br/>🔄 Query execution]
+        CONNECTOR[QdrantConnector<br/>Provider-agnostic interface<br/>Collection management<br/>Vector operations<br/>Query execution]
         
-        MCP_SERVER[QdrantMCPServer<br/>🔄 Provider injection<br/>🔄 Tool registration<br/>🔄 Request routing<br/>🔄 Error handling]
+        MCP_SERVER[QdrantMCPServer<br/>Provider injection<br/>Tool registration<br/>Request routing<br/>Error handling]
     end
 
     subgraph "MCP Tools Layer"
-        SEARCH_TOOL[qdrant-search-repository<br/>🔍 Semantic search<br/>📊 Results ranking<br/>🎯 Filter support]
+        SEARCH_TOOL[qdrant-search-repository<br/>Semantic search<br/>Results ranking<br/>Filter support]
         
-        ANALYZE_TOOL[qdrant-analyze-patterns<br/>📈 Pattern analysis<br/>🏗️ Architecture insights<br/>📋 Statistics generation]
+        ANALYZE_TOOL[qdrant-analyze-patterns<br/>Pattern analysis<br/>Architecture insights<br/>Statistics generation]
         
-        FIND_TOOL[qdrant-find-implementations<br/>🎯 Implementation discovery<br/>📝 Code examples<br/>🔗 Similarity matching]
+        FIND_TOOL[qdrant-find-implementations<br/>Implementation discovery<br/>Code examples<br/>Similarity matching]
     end
 
     subgraph "Storage & External Services"
-        COLLECTIONS[(Qdrant Collections<br/>🗂️ fast-* vectors (FastEmbed)<br/>🗂️ voyage-* vectors (VoyageAI)<br/>🔄 Parallel operation<br/>🚫 No conflicts)]
+        COLLECTIONS[(Qdrant Collections<br/>fast-prefix vectors FastEmbed<br/>voyage-prefix vectors VoyageAI<br/>Parallel operation<br/>No conflicts)]
         
-        VOYAGE_API[🌐 Voyage AI API<br/>voyage-3.5 (general)<br/>voyage-code-3 (code)<br/>voyage-law-2 (legal)<br/>voyage-finance-2 (finance)<br/>voyage-3.5-lite (cost-opt)]
+        VOYAGE_API[Voyage AI API<br/>voyage-3.5 general<br/>voyage-code-3 code<br/>voyage-law-2 legal<br/>voyage-finance-2 finance<br/>voyage-3.5-lite cost-opt]
         
-        FASTEMBED_MODELS[📁 FastEmbed Models<br/>sentence-transformers/*<br/>Local file system<br/>HuggingFace models]
+        FASTEMBED_MODELS[FastEmbed Models<br/>sentence-transformers models<br/>Local file system<br/>HuggingFace models]
     end
 
     subgraph "Data Flow Patterns"
@@ -128,6 +128,47 @@ graph TB
     class SEARCH_TOOL,ANALYZE_TOOL,FIND_TOOL toolLayer
     class COLLECTIONS,VOYAGE_API,FASTEMBED_MODELS storageLayer
     class DOC_FLOW,QUERY_FLOW,COLLECTION_FLOW dataFlowLayer
+```
+
+### Simplified Integration Architecture
+
+For better compatibility, here's a focused view of the core integration:
+
+```mermaid
+graph TD
+    A[Environment Variables<br/>EMBEDDING_PROVIDER<br/>EMBEDDING_MODEL<br/>VOYAGE_API_KEY] --> B[EmbeddingProviderSettings]
+    
+    B --> C[create_embedding_provider]
+    
+    C --> D{Provider Type}
+    D -->|fastembed| E[FastEmbedProvider<br/>Local Models<br/>Thread Pool Async]
+    D -->|voyageai| F[VoyageAIProvider<br/>Cloud API<br/>True Async]
+    
+    F --> G[voyageai.AsyncClient]
+    G --> H[Voyage AI API]
+    
+    E --> I[QdrantConnector]
+    F --> I
+    
+    I --> J[QdrantMCPServer]
+    
+    J --> K[MCP Tools]
+    K --> L[qdrant-search-repository]
+    K --> M[qdrant-analyze-patterns]
+    K --> N[qdrant-find-implementations]
+    
+    I --> O[(Qdrant Collections)]
+    O --> P[fast-* vectors]
+    O --> Q[voyage-* vectors]
+    
+    style E fill:#e8f5e8
+    style F fill:#e8f5e8
+    style G fill:#f0f8ff
+    style H fill:#f0f8ff
+    style I fill:#fff3e0
+    style J fill:#fce4ec
+    style K fill:#f1f8e9
+    style O fill:#e0f2f1
 ```
 
 ## Detailed Integration Points

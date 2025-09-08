@@ -27,90 +27,43 @@ Creating comprehensive documentation and architecture diagrams for the VoyageAI 
 ### Complete Integration Architecture
 
 ```mermaid
-graph TB
-    subgraph "Configuration Layer"
-        ENV[Environment Variables<br/>EMBEDDING_PROVIDER=voyageai<br/>EMBEDDING_MODEL=voyage-3.5<br/>VOYAGE_API_KEY=key]
-        SETTINGS[EmbeddingProviderSettings<br/>provider_type: VOYAGE_AI<br/>model_name: voyage-3.5]
-    end
-
-    subgraph "Factory Layer"
-        FACTORY[create_embedding_provider]
-        FACTORY --> FASTEMBED_CHECK{provider_type ==<br/>FASTEMBED?}
-        FACTORY --> VOYAGE_CHECK{provider_type ==<br/>VOYAGE_AI?}
-    end
-
-    subgraph "Provider Layer"
-        FASTEMBED[FastEmbedProvider<br/>• Local models<br/>• Sync + thread pool<br/>• Vector: fast-*<br/>• Dims: model-specific]
-        VOYAGE[VoyageAIProvider<br/>• Cloud API<br/>• True async<br/>• Vector: voyage-*<br/>• Dims: 1024/512/1536]
-    end
-
-    subgraph "Connector Layer"
-        QDRANT[QdrantConnector<br/>• Abstract provider interface<br/>• Collection management<br/>• Vector operations<br/>• Query execution]
-    end
-
-    subgraph "Server Layer"
-        MCP[QdrantMCPServer<br/>• Tool registration<br/>• Request handling<br/>• Provider injection]
-    end
-
-    subgraph "Tool Layer"
-        SEARCH[qdrant-search-repository<br/>• Semantic search<br/>• Filter support<br/>• Result ranking]
-        ANALYZE[qdrant-analyze-patterns<br/>• Code analysis<br/>• Theme extraction<br/>• Pattern discovery]
-        FIND[qdrant-find-implementations<br/>• Implementation search<br/>• Similarity ranking<br/>• Code examples]
-    end
-
-    subgraph "Storage Layer"
-        COLLECTIONS[(Qdrant Collections<br/>• fast-* vectors (FastEmbed)<br/>• voyage-* vectors (VoyageAI)<br/>• Parallel operation support)]
-    end
-
-    subgraph "External Services"
-        VOYAGE_API[Voyage AI API<br/>• voyage-3.5<br/>• voyage-code-3<br/>• voyage-law-2<br/>• etc.]
-        LOCAL_MODELS[FastEmbed Models<br/>• sentence-transformers/*<br/>• Local execution<br/>• No API required]
-    end
-
-    %% Configuration Flow
-    ENV --> SETTINGS
-    SETTINGS --> FACTORY
-
-    %% Factory Decision Flow
-    FASTEMBED_CHECK -->|Yes| FASTEMBED
-    VOYAGE_CHECK -->|Yes| VOYAGE
-    FASTEMBED_CHECK -->|No| VOYAGE_CHECK
-
-    %% Provider Integration
-    FASTEMBED --> QDRANT
-    VOYAGE --> QDRANT
-
-    %% Server Integration
-    QDRANT --> MCP
-    MCP --> SEARCH
-    MCP --> ANALYZE
-    MCP --> FIND
-
-    %% Data Storage
-    QDRANT --> COLLECTIONS
-
-    %% External Dependencies
-    FASTEMBED --> LOCAL_MODELS
-    VOYAGE --> VOYAGE_API
-
-    %% Styling
-    classDef configLayer fill:#e1f5fe
-    classDef factoryLayer fill:#f3e5f5
-    classDef providerLayer fill:#e8f5e8
-    classDef connectorLayer fill:#fff3e0
-    classDef serverLayer fill:#fce4ec
-    classDef toolLayer fill:#f1f8e9
-    classDef storageLayer fill:#e0f2f1
-    classDef externalLayer fill:#fafafa
-
-    class ENV,SETTINGS configLayer
-    class FACTORY factoryLayer
-    class FASTEMBED,VOYAGE providerLayer
-    class QDRANT connectorLayer
-    class MCP serverLayer
-    class SEARCH,ANALYZE,FIND toolLayer
-    class COLLECTIONS storageLayer
-    class VOYAGE_API,LOCAL_MODELS externalLayer
+graph TD
+    A[Environment Variables<br/>EMBEDDING_PROVIDER<br/>EMBEDDING_MODEL<br/>VOYAGE_API_KEY] --> B[EmbeddingProviderSettings]
+    
+    B --> C[create_embedding_provider]
+    
+    C --> D{Provider Type}
+    D -->|fastembed| E[FastEmbedProvider<br/>Local Models<br/>Thread Pool Async<br/>Vector: fast-prefix]
+    D -->|voyageai| F[VoyageAIProvider<br/>Cloud API<br/>True Async<br/>Vector: voyage-prefix]
+    
+    F --> G[voyageai.AsyncClient]
+    G --> H[Voyage AI API<br/>Multiple Models<br/>Specialized Domains]
+    
+    E --> I[Local FastEmbed Models<br/>sentence-transformers<br/>HuggingFace Hub]
+    
+    E --> J[QdrantConnector<br/>Provider Abstraction]
+    F --> J
+    
+    J --> K[QdrantMCPServer<br/>Tool Registration<br/>Request Routing]
+    
+    K --> L[MCP Tools]
+    L --> M[search-repository]
+    L --> N[analyze-patterns] 
+    L --> O[find-implementations]
+    
+    J --> P[(Qdrant Collections<br/>Vector Storage)]
+    P --> Q[fast-prefix vectors<br/>FastEmbed Collections]
+    P --> R[voyage-prefix vectors<br/>VoyageAI Collections]
+    
+    style E fill:#e8f5e8,stroke:#2e7d2e,stroke-width:2px
+    style F fill:#e8f5e8,stroke:#2e7d2e,stroke-width:2px
+    style G fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style H fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style I fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style J fill:#fff3e0,stroke:#f57400,stroke-width:2px
+    style K fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style L fill:#f1f8e9,stroke:#689f38,stroke-width:2px
+    style P fill:#e0f2f1,stroke:#00796b,stroke-width:2px
 ```
 
 ### Data Flow Architecture
