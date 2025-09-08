@@ -81,8 +81,9 @@ The configuration of the server is done using environment variables:
 | `QDRANT_SEARCH_LIMIT`                       | Maximum results per search operation                                 | `10`                                                              |
 | `QDRANT_READ_ONLY`                          | If `true`, the server will not attempt to create or modify indexes    | `false`                                                           |
 | `QDRANT_ALLOW_ARBITRARY_FILTER`             | Allow arbitrary filter conditions in queries                        | `false`                                                           |
-| `EMBEDDING_PROVIDER`                        | Embedding provider to use (currently only "fastembed" is supported) | `fastembed`                                                       |
-| `EMBEDDING_MODEL`                           | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2`                          |
+| `EMBEDDING_PROVIDER`                        | Embedding provider to use (`fastembed` or `voyageai`)              | `fastembed`                                                       |
+| `EMBEDDING_MODEL`                           | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2` (FastEmbed) or `voyage-3.5` (VoyageAI) |
+| `VOYAGE_API_KEY`                            | API key for Voyage AI embedding service (required when using `voyageai` provider) | None                                                              |
 | `TOOL_SEARCH_REPOSITORY_DESCRIPTION`        | Custom description for the search-repository tool                   | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
 | `TOOL_ANALYZE_PATTERNS_DESCRIPTION`         | Custom description for the analyze-repository-patterns tool         | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
 | `TOOL_FIND_IMPLEMENTATIONS_DESCRIPTION`     | Custom description for the find-repository-implementations tool     | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
@@ -125,11 +126,45 @@ important ones are listed below:
 When using [`uvx`](https://docs.astral.sh/uv/guides/tools/#running-tools) no specific installation is needed to directly run the server.
 
 ```shell
+# Using FastEmbed (default, local embedding)
 QDRANT_URL="http://localhost:6333" \
 COLLECTION_NAME="my-collection" \
 EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2" \
 uvx mcp-server-qdrant-pro
 ```
+
+### Using VoyageAI Embeddings
+
+For state-of-the-art cloud-based embeddings using VoyageAI:
+
+```shell
+# Using VoyageAI (requires API key)
+QDRANT_URL="http://localhost:6333" \
+COLLECTION_NAME="my-collection" \
+EMBEDDING_PROVIDER="voyageai" \
+EMBEDDING_MODEL="voyage-3.5" \
+VOYAGE_API_KEY="your-voyage-api-key" \
+uvx mcp-server-qdrant-pro
+```
+
+#### Embedding Provider Options
+
+**FastEmbed (Default)**
+- Local embedding models
+- No API key required
+- No usage costs
+- Models: sentence-transformers/* series
+
+**VoyageAI** 
+- State-of-the-art cloud embeddings
+- Requires API key from [Voyage AI](https://dash.voyageai.com)
+- Usage-based pricing
+- Specialized models available:
+  - `voyage-3.5`: General-purpose (recommended)
+  - `voyage-code-3`: Code-optimized  
+  - `voyage-law-2`: Legal documents
+  - `voyage-finance-2`: Financial documents
+  - `voyage-3.5-lite`: Cost-optimized
 
 #### Transport Protocols
 

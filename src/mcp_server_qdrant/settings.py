@@ -88,7 +88,7 @@ class EmbeddingProviderSettings(BaseSettings):
     @model_validator(mode="after")
     def _coerce_provider_type(self) -> "EmbeddingProviderSettings":
         """Coerce arbitrary provider inputs to a supported enum, defaulting to FASTEMBED.
-        Accepts legacy strings like provider="test" used in tests without raising.
+        Supports: 'fastembed', 'voyageai'. Accepts legacy strings used in tests without raising.
         """
         try:
             if isinstance(self.provider_type, str):
