@@ -22,6 +22,11 @@ from mcp_server_qdrant.enterprise_tools import (
     analyze_repository_patterns,
     find_implementations,
 )
+from mcp_server_qdrant.outlook_tools import (
+    search_emails,
+    analyze_mailbox,
+    find_threads,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -135,7 +140,8 @@ class QdrantMCPServer(FastMCP):
 
     def setup_tools(self):
         """
-        Register enterprise-specific tools for GitHub codebase search.
+        Register enterprise-specific tools for GitHub codebase search or Outlook email search
+        based on the configured tool suite.
         """
         # Local shim to mirror what tests expect when iterating server.app._tools
         class _ToolShim:
@@ -145,7 +151,14 @@ class QdrantMCPServer(FastMCP):
 
         filterable_conditions = self.qdrant_settings.filterable_fields_dict_with_conditions()
 
-        # Create enterprise tool functions with proper context
+        # Branch tool registration based on selected suite
+        suite = getattr(self.tool_settings, "tool_suite", None) or getattr(
+            self.qdrant_settings, "tool_suite", "github"
+        )
+
+        # -------------------------------
+        # GitHub Suite
+        # -------------------------------
         async def enterprise_search_repository(
             ctx: Context,
             repository_id: str,
@@ -329,34 +342,263 @@ class QdrantMCPServer(FastMCP):
                 min_complexity,
             )
 
-        # Register enterprise tools directly (filter wrapping disabled for now)
-        # Note: Individual parameters will be exposed based on function signatures
+        # -------------------------------
+        # Outlook Suite
+        # -------------------------------
+        async def enterprise_search_emails(
+            ctx: Context,
+            query: str,
+            sender: str | None = None,
+            to: str | None = None,
+            labels: str | None = None,
+            has_attachments: bool | None = None,
+            is_html: bool | None = None,
+            content_length: int | None = None,
+            thread_id: str | None = None,
+            message_id: str | None = None,
+            subject: str | None = None,
+            sentiment: str | None = None,
+            priority: str | None = None,
+            language: str | None = None,
+            date: str | None = None,
+            query_filter: ArbitraryFilter | None = None,
+        ):
+            # Parse labels JSON if provided
+            labels_list: list[str] | None = None
+            if labels:
+                try:
+                    labels_list = json.loads(labels)
+                    if not isinstance(labels_list, list):
+                        raise ValueError("labels must be a JSON array")
+                except (json.JSONDecodeError, ValueError) as e:
+                    await ctx.error(str(e))
+                    return [f"Error: {e}"]
 
-        # Apply query_filter removal if arbitrary filters not allowed
-        if not self.qdrant_settings.allow_arbitrary_filter:
-            enterprise_search_repository = make_partial_function(enterprise_search_repository, {"query_filter": None})
+            filter_conditions: Dict[str, Any] = {}
+            if sender:
+                filter_conditions["email.from"] = sender
+            if to:
+                filter_conditions["email.to"] = to
+            if labels_list:
+                filter_conditions["email.labels"] = labels_list
+            if has_attachments is not None:
+                filter_conditions["email.has_attachments"] = has_attachments
+            if is_html is not None:
+                filter_conditions["email.is_html"] = is_html
+            if content_length is not None:
+                filter_conditions["email.content_length"] = content_length
+            if thread_id:
+                filter_conditions["email.thread_id"] = thread_id
+            if message_id:
+                filter_conditions["email.message_id"] = message_id
+            if subject:
+                filter_conditions["email.subject"] = subject
+            if sentiment:
+                filter_conditions["email.sentiment"] = sentiment
+            if priority:
+                filter_conditions["email.priority"] = priority
+            if language:
+                filter_conditions["email.language"] = language
+            if date:
+                filter_conditions["email.date"] = date
 
-        # Register enterprise tools with expected names used in tests
-        self.tool(
-            enterprise_search_repository,
-            name="qdrant-search-repository",
-            description=self.tool_settings.search_repository_description
-        )
-        if hasattr(self, "app") and hasattr(self.app, "_tools"):
-            self.app._tools["qdrant-search-repository"] = _ToolShim("qdrant-search-repository", enterprise_search_repository)
+            from mcp_server_qdrant.common.filters import make_filter
+            built_filter = make_filter(filterable_conditions, filter_conditions)
+            combined_filter = models.Filter(**built_filter) if built_filter else None
 
-        self.tool(
-            enterprise_analyze_patterns,
-            name="qdrant-analyze-patterns",
-            description=self.tool_settings.analyze_patterns_description
-        )
-        if hasattr(self, "app") and hasattr(self.app, "_tools"):
-            self.app._tools["qdrant-analyze-patterns"] = _ToolShim("qdrant-analyze-patterns", enterprise_analyze_patterns)
+            # Merge with additional query_filter if present
+            if query_filter and combined_filter:
+                additional_filter = models.Filter(**query_filter)
+                def _as_list(x):
+                    if x is None:
+                        return []
+                    return x if isinstance(x, list) else [x]
+                must = _as_list(getattr(combined_filter, "must", None)) + _as_list(getattr(additional_filter, "must", None))
+                must_not = _as_list(getattr(combined_filter, "must_not", None)) + _as_list(getattr(additional_filter, "must_not", None))
+                should = _as_list(getattr(combined_filter, "should", None)) + _as_list(getattr(additional_filter, "should", None))
+                combined_filter = models.Filter(
+                    must=must or None,
+                    must_not=must_not or None,
+                    should=should or None,
+                )
+            elif query_filter:
+                combined_filter = models.Filter(**query_filter)
 
-        self.tool(
-            enterprise_find_implementations,
-            name="qdrant-find-implementations",
-            description=self.tool_settings.find_implementations_description
-        )
-        if hasattr(self, "app") and hasattr(self.app, "_tools"):
-            self.app._tools["qdrant-find-implementations"] = _ToolShim("qdrant-find-implementations", enterprise_find_implementations)
+            return await search_emails(
+                ctx,
+                self.qdrant_connector,
+                self.qdrant_settings.search_limit,
+                self.qdrant_settings.collection_name or "qdrant_collection",
+                query,
+                combined_filter.model_dump() if combined_filter else None,
+            )
+
+        async def enterprise_analyze_mailbox(
+            ctx: Context,
+            focus_terms: str | None = None,
+            sender: str | None = None,
+            to: str | None = None,
+            labels: str | None = None,
+            has_attachments: bool | None = None,
+            is_html: bool | None = None,
+            sentiment: str | None = None,
+            priority: str | None = None,
+            language: str | None = None,
+            date: str | None = None,
+        ):
+            # Parse focus_terms and labels JSON arrays
+            focus_terms_list: list[str] | None = None
+            labels_list: list[str] | None = None
+            try:
+                if focus_terms:
+                    focus_terms_list = json.loads(focus_terms)
+                    if not isinstance(focus_terms_list, list):
+                        raise ValueError("focus_terms must be a JSON array")
+            except (json.JSONDecodeError, ValueError) as e:
+                await ctx.error(str(e))
+                return [f"Error: {e}"]
+            try:
+                if labels:
+                    labels_list = json.loads(labels)
+                    if not isinstance(labels_list, list):
+                        raise ValueError("labels must be a JSON array")
+            except (json.JSONDecodeError, ValueError) as e:
+                await ctx.error(str(e))
+                return [f"Error: {e}"]
+
+            filter_conditions: Dict[str, Any] = {}
+            if sender:
+                filter_conditions["email.from"] = sender
+            if to:
+                filter_conditions["email.to"] = to
+            if labels_list:
+                filter_conditions["email.labels"] = labels_list
+            if has_attachments is not None:
+                filter_conditions["email.has_attachments"] = has_attachments
+            if is_html is not None:
+                filter_conditions["email.is_html"] = is_html
+            if sentiment:
+                filter_conditions["email.sentiment"] = sentiment
+            if priority:
+                filter_conditions["email.priority"] = priority
+            if language:
+                filter_conditions["email.language"] = language
+            if date:
+                filter_conditions["email.date"] = date
+
+            from mcp_server_qdrant.common.filters import make_filter
+            built_filter = make_filter(filterable_conditions, filter_conditions)
+            combined_filter = models.Filter(**built_filter) if built_filter else None
+
+            return await analyze_mailbox(
+                ctx,
+                self.qdrant_connector,
+                self.qdrant_settings.search_limit,
+                self.qdrant_settings.collection_name or "qdrant_collection",
+                combined_filter.model_dump() if combined_filter else None,
+                focus_terms_list,
+            )
+
+        async def enterprise_find_threads(
+            ctx: Context,
+            query: str | None = None,
+            thread_id: str | None = None,
+            sender: str | None = None,
+            to: str | None = None,
+            labels: str | None = None,
+            date: str | None = None,
+        ):
+            labels_list: list[str] | None = None
+            if labels:
+                try:
+                    labels_list = json.loads(labels)
+                    if not isinstance(labels_list, list):
+                        raise ValueError("labels must be a JSON array")
+                except (json.JSONDecodeError, ValueError) as e:
+                    await ctx.error(str(e))
+                    return [f"Error: {e}"]
+
+            filter_conditions: Dict[str, Any] = {}
+            if thread_id:
+                filter_conditions["email.thread_id"] = thread_id
+            if sender:
+                filter_conditions["email.from"] = sender
+            if to:
+                filter_conditions["email.to"] = to
+            if labels_list:
+                filter_conditions["email.labels"] = labels_list
+            if date:
+                filter_conditions["email.date"] = date
+
+            from mcp_server_qdrant.common.filters import make_filter
+            built_filter = make_filter(filterable_conditions, filter_conditions)
+            combined_filter = models.Filter(**built_filter) if built_filter else None
+
+            return await find_threads(
+                ctx,
+                self.qdrant_connector,
+                self.qdrant_settings.search_limit,
+                self.qdrant_settings.collection_name or "qdrant_collection",
+                query,
+                combined_filter.model_dump() if combined_filter else None,
+                thread_id,
+            )
+
+        # Register suite-specific tools
+        if suite == "outlook":
+            # If arbitrary filters are not allowed, strip query_filter arg via partial
+            if not self.qdrant_settings.allow_arbitrary_filter:
+                enterprise_search_emails = make_partial_function(enterprise_search_emails, {"query_filter": None})
+
+            self.tool(
+                enterprise_search_emails,
+                name="qdrant-search-emails",
+                description=self.tool_settings.search_emails_description,
+            )
+            if hasattr(self, "app") and hasattr(self.app, "_tools"):
+                self.app._tools["qdrant-search-emails"] = _ToolShim("qdrant-search-emails", enterprise_search_emails)
+
+            self.tool(
+                enterprise_analyze_mailbox,
+                name="qdrant-analyze-mailbox",
+                description=self.tool_settings.analyze_mailbox_description,
+            )
+            if hasattr(self, "app") and hasattr(self.app, "_tools"):
+                self.app._tools["qdrant-analyze-mailbox"] = _ToolShim("qdrant-analyze-mailbox", enterprise_analyze_mailbox)
+
+            self.tool(
+                enterprise_find_threads,
+                name="qdrant-find-threads",
+                description=self.tool_settings.find_threads_description,
+            )
+            if hasattr(self, "app") and hasattr(self.app, "_tools"):
+                self.app._tools["qdrant-find-threads"] = _ToolShim("qdrant-find-threads", enterprise_find_threads)
+        else:
+            # Apply query_filter removal if arbitrary filters not allowed
+            if not self.qdrant_settings.allow_arbitrary_filter:
+                enterprise_search_repository = make_partial_function(enterprise_search_repository, {"query_filter": None})
+
+            # Register enterprise tools with expected names used in tests
+            self.tool(
+                enterprise_search_repository,
+                name="qdrant-search-repository",
+                description=self.tool_settings.search_repository_description
+            )
+            if hasattr(self, "app") and hasattr(self.app, "_tools"):
+                self.app._tools["qdrant-search-repository"] = _ToolShim("qdrant-search-repository", enterprise_search_repository)
+
+            self.tool(
+                enterprise_analyze_patterns,
+                name="qdrant-analyze-patterns",
+                description=self.tool_settings.analyze_patterns_description
+            )
+            if hasattr(self, "app") and hasattr(self.app, "_tools"):
+                self.app._tools["qdrant-analyze-patterns"] = _ToolShim("qdrant-analyze-patterns", enterprise_analyze_patterns)
+
+            self.tool(
+                enterprise_find_implementations,
+                name="qdrant-find-implementations",
+                description=self.tool_settings.find_implementations_description
+            )
+            if hasattr(self, "app") and hasattr(self.app, "_tools"):
+                self.app._tools["qdrant-find-implementations"] = _ToolShim("qdrant-find-implementations", enterprise_find_implementations)

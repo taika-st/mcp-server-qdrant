@@ -37,6 +37,19 @@ FIND_IMPLEMENTATIONS_DESCRIPTION = (
     "or finding examples of specific patterns. Returns implementations ranked by similarity."
 )
 
+# Outlook tool descriptions
+SEARCH_EMAILS_DESCRIPTION = (
+    "Search Outlook emails by semantic content and filters like sender, recipients, labels, and attachments. "
+    "Use labels as a JSON array (e.g., ['finance','infra'])."
+)
+
+ANALYZE_MAILBOX_DESCRIPTION = (
+    "Analyze mailbox patterns and summarize senders, labels, and thread activity based on semantic sampling."
+)
+
+FIND_THREADS_DESCRIPTION = (
+    "Find and summarize email threads by semantic topic or specific thread_id."
+)
 METADATA_PATH = "metadata"
 
 
@@ -44,6 +57,11 @@ class ToolSettings(BaseSettings):
     """
     Configuration for enterprise GitHub codebase search tools.
     """
+
+    # Select which enterprise tool suite to expose: 'github' (default) or 'outlook'
+    tool_suite: Literal["github", "outlook"] = Field(
+        default="github", validation_alias="ENTERPRISE_TOOL_SUITE"
+    )
 
     # Legacy/generic tool descriptions (for tests/backward compatibility)
     tool_store_description: str = Field(
@@ -66,6 +84,20 @@ class ToolSettings(BaseSettings):
     find_implementations_description: str = Field(
         default=FIND_IMPLEMENTATIONS_DESCRIPTION,
         validation_alias="TOOL_FIND_IMPLEMENTATIONS_DESCRIPTION",
+    )
+
+    # Outlook tool descriptions
+    search_emails_description: str = Field(
+        default=SEARCH_EMAILS_DESCRIPTION,
+        validation_alias="TOOL_SEARCH_EMAILS_DESCRIPTION",
+    )
+    analyze_mailbox_description: str = Field(
+        default=ANALYZE_MAILBOX_DESCRIPTION,
+        validation_alias="TOOL_ANALYZE_MAILBOX_DESCRIPTION",
+    )
+    find_threads_description: str = Field(
+        default=FIND_THREADS_DESCRIPTION,
+        validation_alias="TOOL_FIND_THREADS_DESCRIPTION",
     )
 
 class EmbeddingProviderSettings(BaseSettings):
@@ -148,6 +180,11 @@ class QdrantSettings(BaseSettings):
         default=False, validation_alias="QDRANT_ALLOW_ARBITRARY_FILTER"
     )
 
+    # Select which enterprise tool suite / schema to index: 'github' (default) or 'outlook'
+    tool_suite: Literal["github", "outlook"] = Field(
+        default="github", validation_alias="ENTERPRISE_TOOL_SUITE"
+    )
+
     def filterable_fields_dict(self) -> dict[str, FilterableField]:
         return self._get_enterprise_filterable_fields_dict()
 
@@ -157,21 +194,37 @@ class QdrantSettings(BaseSettings):
 
 
     def _get_enterprise_filterable_fields_dict(self) -> dict[str, FilterableField]:
-        """Get enterprise filterable fields configuration."""
+        """Get enterprise filterable fields configuration based on the selected tool suite."""
         # Import here to avoid circular imports
         try:
-            from mcp_server_qdrant.enterprise_config import get_enterprise_filterable_fields_dict
-            return get_enterprise_filterable_fields_dict()
+            if self.tool_suite == "outlook":
+                from mcp_server_qdrant.enterprise_config_outlook import (
+                    get_outlook_filterable_fields_dict,
+                )
+                return get_outlook_filterable_fields_dict()
+            else:
+                from mcp_server_qdrant.enterprise_config import (
+                    get_enterprise_filterable_fields_dict,
+                )
+                return get_enterprise_filterable_fields_dict()
         except ImportError:
             # Fallback to empty dict if enterprise config is not available
             return {}
 
     def _get_enterprise_filterable_fields_with_conditions(self) -> dict[str, FilterableField]:
-        """Get enterprise filterable fields with conditions."""
+        """Get enterprise filterable fields with conditions based on the selected tool suite."""
         # Import here to avoid circular imports
         try:
-            from mcp_server_qdrant.enterprise_config import get_enterprise_filterable_fields_with_conditions
-            return get_enterprise_filterable_fields_with_conditions()
+            if self.tool_suite == "outlook":
+                from mcp_server_qdrant.enterprise_config_outlook import (
+                    get_outlook_filterable_fields_with_conditions,
+                )
+                return get_outlook_filterable_fields_with_conditions()
+            else:
+                from mcp_server_qdrant.enterprise_config import (
+                    get_enterprise_filterable_fields_with_conditions,
+                )
+                return get_enterprise_filterable_fields_with_conditions()
         except ImportError:
             # Fallback to empty dict if enterprise config is not available
             return {}

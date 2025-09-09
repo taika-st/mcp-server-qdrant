@@ -560,6 +560,25 @@ npx @modelcontextprotocol/inspector uv run mcp-server-qdrant-pro
 # For enterprise mode testing
 ENTERPRISE_MODE=true COLLECTION_NAME="test" QDRANT_LOCAL_PATH="/tmp/test-storage" \
 npx @modelcontextprotocol/inspector uv run mcp-server-qdrant-pro
+
+# For enterprise testing with defined envs
+npx @modelcontextprotocol/inspector \
+  -e QDRANT_URL="https://edbe86b1-dd3c-4de3-940a-ee807504d165.us-west-2-0.aws.cloud.qdrant.io" \
+  -e QDRANT_API_KEY="my_api_key" \
+  -e COLLECTION_NAME="codebase_documents" \
+  -e EMBEDDING_MODEL="jinaai/jina-embeddings-v2-base-code" \
+  -- uvx mcp-server-qdrant-pro@latest
+  
+# For outlook testing with local qdrant docker instance
+npx @modelcontextprotocol/inspector \
+  -e ENTERPRISE_TOOL_SUITE=outlook \
+  -e QDRANT_URL="http://artemis-nas:6333" \
+  -e QDRANT_API_KEY="$QDRANT_API_KEY" \
+  -e COLLECTION_NAME="email_collection" \
+  -e EMBEDDING_PROVIDER="voyageai" \
+  -e EMBEDDING_MODEL="voyage-3-large" \
+  -e VOYAGE_API_KEY="$VOYAGE_API_KEY" \
+  -- uv run mcp-server-qdrant-pro
 ```
 
 ## License

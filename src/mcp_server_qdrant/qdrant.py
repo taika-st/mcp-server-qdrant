@@ -124,13 +124,27 @@ class QdrantConnector:
         vector_name = self._embedding_provider.get_vector_name()
 
         # Search in Qdrant
-        search_results = await self._client.query_points(
-            collection_name=collection_name,
-            query=query_vector,
-            using=vector_name,
-            limit=limit,
-            query_filter=query_filter,
-        )
+        try:
+            search_results = await self._client.query_points(
+                collection_name=collection_name,
+                query=query_vector,
+                using=vector_name,
+                limit=limit,
+                query_filter=query_filter,
+            )
+        except Exception as e:
+            # Graceful fallback for collections configured with an unnamed vector
+            # Qdrant error example: "Vector with name <X> is not configured in this collection"
+            msg = str(e).lower()
+            if "not configured in this collection" in msg or "vector with name" in msg:
+                search_results = await self._client.query_points(
+                    collection_name=collection_name,
+                    query=query_vector,
+                    limit=limit,
+                    query_filter=query_filter,
+                )
+            else:
+                raise
 
         return [
             Entry(
